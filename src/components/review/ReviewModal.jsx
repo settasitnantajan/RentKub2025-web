@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import StarRatingInput from "@/components/ui/StarRatingInput";
+import StarRatingInput from '../ui/starRatingInput'; // Capitalized component name, path remains lowercase
+
 import { Loader2 } from 'lucide-react';
 
 const ReviewModal = ({ isOpen, onClose, onSubmitReview, landmarkName, bookingId, landmarkId }) => {
