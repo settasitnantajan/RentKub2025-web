@@ -35,6 +35,14 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Custom colors for calendar states */
+  /* Using approximate oklch values for rose/amber based on common Tailwind palettes */
+  --unavailable-bg: oklch(0.985 0.013 18.5); /* rose-100 approx */
+  --unavailable-fg: oklch(0.577 0.245 27.325); /* rose-500 approx */
+  --no-config-bg: oklch(0.985 0.035 84.5); /* amber-100 approx */
+  --no-config-fg: oklch(0.646 0.222 41.116); /* amber-600 approx, matches chart-1 */
+  /* Past day colors derived from muted */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -69,6 +77,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+
+  /* Custom colors for calendar states (Dark Mode) */
+  /* Using approximate oklch values for dark rose/amber */
+  --unavailable-bg: oklch(0.18 0.02 20); /* dark rose approx */
+  --unavailable-fg: oklch(0.704 0.191 22.216); /* destructive, rose-300/400 approx */
+  --no-config-bg: oklch(0.18 0.04 80); /* dark amber approx */
+  --no-config-fg: oklch(0.828 0.189 84.429); /* chart-4, amber-300/400 approx */
+  /* Past day colors derived from muted */
   --sidebar: oklch(0.21 0.006 285.885);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

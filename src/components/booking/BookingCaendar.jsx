@@ -1,4 +1,5 @@
-import { Calendar } from "@/components/ui/calendar";
+import Calendar from 'react-calendar'; // <-- Import react-calendar
+import 'react-calendar/dist/Calendar.css'; // <-- Import default styles for react-calendar
 import { useEffect, useState } from "react"; // Removed useMemo
 import useBookingStore from "@/store/booking-store.jsx";
 import { listBookingsByCampingId } from "@/api/booking"; // <-- Import the NEW function
@@ -264,64 +265,90 @@ const BookingCaendar = ({
     return isDisabled;
   };
 
+  // New handler for react-calendar's onChange
+  const handleDateChange = (value) => {
+    let newSelectedRange;
+    if (Array.isArray(value)) {
+      // Range selected [startDate, endDate]
+      newSelectedRange = { from: startOfDay(value[0]), to: startOfDay(value[1]) };
+    } else {
+      // First date of a range selected, or single date
+      newSelectedRange = { from: startOfDay(value), to: undefined };
+    }
+    // Proceed with validation and setting the range
+    validateAndSetRange(newSelectedRange);
+  };
 
-  // Handle date range selection
-  const handleSelect = (selectedRange) => {
-    // If only 'from' is selected, or 'from' is re-selected, update normally
-    if (!selectedRange || !selectedRange.to || selectedRange.from === selectedRange.to) {
-      console.log("[BookingCalendar] handleSelect: Setting initial/single date:", selectedRange);
-      setRange(selectedRange || defaultSelected);
+  // Adapted validation logic from original handleSelect
+  const validateAndSetRange = (selectedRange) => {
+    const { from, to } = selectedRange;
+
+    // If only 'from' is selected (to is undefined)
+    if (from && !to) {
+      console.log("[BookingCalendar] validateAndSetRange: Setting 'from' date:", selectedRange);
+      setRange({ from, to: undefined });
       return;
     }
 
-    // Check if the selected range includes any fully booked days
-    const { from, to } = selectedRange;
+    // If 'from' and 'to' are both defined (range potentially complete)
+    if (!from || !to) { // Should not happen if logic is correct, but as a safeguard
+      setRange(defaultSelected);
+      return;
+    }
 
     // --- Check for minimum stay (at least 1 night) ---
-    if (differenceInCalendarDays(to, from) < 1) { // Changed from 2 to 1
-      console.warn("[BookingCalendar] handleSelect: Selection rejected - minimum stay is 1 night.");
-      createAlert("error", "Minimum stay is 1 night."); // Updated error message
+    if (differenceInCalendarDays(to, from) < 1) {
+      console.warn("[BookingCalendar] validateAndSetRange: Selection rejected - minimum stay is 1 night.");
+      createAlert("error", "Minimum stay is 1 night.");
       setRange({ from: from, to: undefined }); // Reset 'to' date, keep 'from'
-      return; // Stop processing this selection
+      return;
     }
-    // --- END NEW CHECK ---
-    
-    // Re-calculate interval for checking disabled days, includes check-in day, excludes check-out day for stay duration.
-    // For checking disabled status, we should check all days from 'from' up to, but not including, 'to'.
+
     const interval = eachDayOfInterval({ start: from, end: addDays(to, -1) }); 
-    // Check if any day in the selected interval is disabled
-    const isAnyDayInIntervalDisabled = interval.some(day => disableDates(day));
+    const isAnyDayInIntervalDisabled = interval.some(day => tileDisabledCallback({ date: day, view: 'month' })); // Use tileDisabledCallback for check
 
     if (isAnyDayInIntervalDisabled) {
-      console.warn("BookingCalendar - handleSelect: Selection rejected - interval includes a disabled day.");
+      console.warn("[BookingCalendar] validateAndSetRange: Selection rejected - interval includes a disabled day.");
       createAlert("error", "Selected range includes unavailable dates.");
-      setRange({ from: selectedRange.from, to: undefined });
+      setRange({ from: from, to: undefined }); // Reset 'to', keep 'from'
     } else {
-      console.log("[BookingCalendar] handleSelect: Valid range selected:", selectedRange);
+      console.log("[BookingCalendar] validateAndSetRange: Valid range selected:", selectedRange);
       setRange(selectedRange);
     }
   };
 
-  const modifiers = {
-    past: day => isBefore(startOfDay(day), startOfDay(new Date())),
-    fullyBooked: day => {
-      const dayKey = startOfDay(day).toISOString().split('T')[0];
-      // Apply only if it's a future date that's fully booked
-      const isBooked = fullyBookedDays.has(dayKey) && !isBefore(startOfDay(day), startOfDay(new Date()));
-      // if (isBooked) console.log(`[BookingCalendar] Modifier 'fullyBooked' TRUE for ${dayKey}. Is signedIn: ${isSignedIn}`);
-      return isBooked;
-    },
-    noRoomsConfigured: day => totalRooms <= 0 && !isBefore(startOfDay(day), startOfDay(new Date())),
+  // Function for react-calendar's tileDisabled prop
+  const tileDisabledCallback = ({ date, view }) => {
+    if (view === 'month') { // Apply disabling logic only for month view
+      return disableDates(date); // Reuse your existing disableDates logic
+    }
+    return false; // Don't disable tiles in year/decade view etc.
   };
 
-  // Define class names for the modifiers
-  const modifiersClassNames = {
-    // Style for unavailable days (already disabled, but good for visual clarity)
-    // Make it more visually distinct: grey background, stronger opacity, line-through, not-allowed cursor
-    // Let's try a subtle red background and keep the line-through for clarity
-    past: 'text-slate-400 line-through opacity-70 !cursor-not-allowed',
-    fullyBooked: 'bg-rose-100 text-rose-500 line-through opacity-80 !cursor-not-allowed font-medium',
-    noRoomsConfigured: 'bg-amber-100 text-amber-600 line-through opacity-80 !cursor-not-allowed',
+  // Function for react-calendar's tileClassName prop
+  const tileClassNameCallback = ({ date, view }) => {
+    if (view === 'month') {
+      const dayStart = startOfDay(date);
+      const dayKey = dayStart.toISOString().split('T')[0];
+      const classes = [];
+
+      if (isBefore(dayStart, startOfDay(new Date()))) {
+        classes.push('past-day');
+      } else if (fullyBookedDays.has(dayKey)) {
+        classes.push('fully-booked-day');
+      } else if (totalRooms <= 0) {
+        classes.push('no-rooms-configured-day');
+      }
+      return classes.length > 0 ? classes.join(' ') : null;
+    }
+    return null;
+  };
+
+  // Determine the value for react-calendar based on the current range state
+  const getCalendarValue = () => {
+    if (range.from && range.to) return [range.from, range.to];
+    if (range.from) return range.from; // A single date or the start of a range selection
+    return null; // No selection
   };
 
   if (isLoading) {
@@ -340,14 +367,15 @@ const BookingCaendar = ({
   return (
     <div className="flex flex-col items-center"> {/* Center the calendar and text */}
       <Calendar
-        mode="range"
-        onSelect={handleSelect} // Use the validation handler
-        selected={range}
-        disabled={disableDates} // Use our function to disable dates
+        onChange={handleDateChange}
+        value={getCalendarValue()}
+        selectRange={true}
+        tileDisabled={tileDisabledCallback}
+        tileClassName={tileClassNameCallback}
+        minDate={new Date()} // Optionally prevent selecting past dates at react-calendar level
         className="rounded-xl border p-5 shadow-lg bg-white" // Increased padding, stronger shadow
-        modifiers={modifiers} // Apply modifiers for styling
-        modifiersClassNames={modifiersClassNames} // Apply the styles
       />
+      {/* Informational text below the calendar */}
       {/* Container for info text below calendar */}
       <div className="mt-4 p-3 border rounded-md bg-gray-50 w-full max-w-sm text-center text-sm text-gray-700 space-y-1">
         {isSignedIn ? (
