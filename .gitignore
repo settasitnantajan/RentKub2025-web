@@ -1,0 +1,32 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment specific configuration files
+# These often store API keys or other settings that might be sensitive
+# or environment-specific. It's good practice to ignore these files
+# and provide template/example files instead (e.g., .env.example).
+.env
+.env.*
+!*.env.example
+!*.env.sample
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
