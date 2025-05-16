@@ -141,6 +141,7 @@ function CampingDetail() {
   const storeIsLoading = useCampingStore((state) => state.isLoadingDetail); // Renamed for clarity
   // --- States for Review Pagination from Store ---
   const allReviewsForDetail = useCampingStore((state) => state.allReviewsForDetail);
+  console.log(allReviewsForDetail, 'allReviewsForDetail')
   const currentReviewsPage = useCampingStore((state) => state.currentReviewsPageForDetail);
   const totalReviewsFromStore = useCampingStore((state) => state.totalReviewsForDetail); // Renamed to avoid conflict
   const isLoadingMoreReviews = useCampingStore((state) => state.isLoadingMoreReviews);
@@ -150,6 +151,7 @@ function CampingDetail() {
     (state) => state.clearCurrentCampingDetail
   );
 
+  console.log(camping, 'campings')
   // --- Data Fetching ---
   useEffect(() => {
     let timerId = null; // To store the timeout ID, initialize to null
@@ -210,7 +212,7 @@ function CampingDetail() {
       if (fetchLat == null || fetchLng == null) return;
       console.log(`Fetching location name for: ${lat}, ${lng}`);
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
         if (!response.ok) {
           throw new Error(`Nominatim API request failed: ${response.status}`);
         }
@@ -301,18 +303,20 @@ function CampingDetail() {
     if (camping?.averageRatingsByCategory) {
       return {
         overall: camping.averageRating ?? DEFAULT_RATING,
+        customerSupport: camping.reviews[0].customerSupportRating ?? DEFAULT_RATING,
+        convenience: camping.reviews[0].convenienceRating ?? DEFAULT_RATING,
+        signalQuality: camping.reviews[0].signalQualityRating ?? DEFAULT_RATING,
         ...camping.averageRatingsByCategory, // e.g., { customerSupport: 4.5, convenience: 4.2, ... }
       };
     }
     // Fallback if backend doesn't send detailed breakdown but sends overall
     return {
       overall: camping?.averageRating ?? (camping?.rating ?? DEFAULT_RATING),
-      customerSupport: 0, // Default or derive if possible
-      convenience: 0,
-      signalQuality: 0,
+      customerSupport: camping?.reviews[0]?.customerSupportRating ?? DEFAULT_RATING, // Default or derive if possible
+      convenience: camping?.reviews[0]?.convenienceRating ?? DEFAULT_RATING,
+      signalQuality: camping?.reviews[0]?.signalQualityRating ?? DEFAULT_RATING,
     };
   }, [camping?.averageRating, camping?.rating, camping?.averageRatingsByCategory]);
-
   // --- Main Memoized Data Preparation ---
   const preparedData = useMemo(() => {
     // Add console log to see when this memo recalculates
@@ -585,8 +589,8 @@ function CampingDetail() {
     secondaryImages,
     amenities,
     rating,    
-    // reviews, // We will use allReviewsForDetail from the store directly
-    // totalReviews, // We will use totalReviewsFromStore from the store directly
+    reviews, // We will use allReviewsForDetail from the store directly for the list (but uncommenting to fix ReferenceError)
+    // totalReviews, // We will use totalReviewsFromStore from the store directly for counts
     reviewCount,
     locationName,
     host,
@@ -941,7 +945,8 @@ function CampingDetail() {
             </h2>
             <Suspense fallback={SuspenseFallback}> {/* Suspense for initial load of ReviewList/RatingBreakdownCard */}
               {/* Rating Breakdown Section */}
-              {reviews.length > 0 && (
+              {/* Use allReviewsForDetail.length or totalReviewsFromStore to decide if breakdown should show */}
+              {allReviewsForDetail.length > 0 && ( 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 mb-6 mt-4">
                   <RatingBreakdownCard label="Overall experience" rating={averageRatings.overall} />
                   <RatingBreakdownCard label="Customer support" rating={averageRatings.customerSupport} />
