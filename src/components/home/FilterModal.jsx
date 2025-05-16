@@ -18,9 +18,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 // import { Switch } from "@/components/ui/switch"; // Optional: Use Switch for boolean
 import { Slider } from "@/components/ui/slider"; // Optional: Use Slider for price
 import { amenityList } from "@/utils/amenities";
-import { Filter, Calendar as CalendarIcon } from "lucide-react"; // Icon for the trigger button
-import { Calendar } from "@/components/ui/calendar";
+import { Filter } from "lucide-react"; // Icon for the trigger button
 import { format, parseISO, isValid } from "date-fns"; // For date formatting and parsing
+import Calendar from 'react-calendar'; // Import react-calendar
+import 'react-calendar/dist/Calendar.css'; // Import react-calendar CSS
 
 const FilterModal = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,10 +40,6 @@ const FilterModal = () => {
   // Date filter states
   const [checkInDate, setCheckInDate] = useState(undefined);
   const [checkOutDate, setCheckOutDate] = useState(undefined);
-
-  // State for showing calendars directly
-  const [showCheckInCalendar, setShowCheckInCalendar] = useState(false);
-  const [showCheckOutCalendar, setShowCheckOutCalendar] = useState(false);
 
   // --- Sync local state with URL params when modal opens ---
   useEffect(() => {
@@ -154,8 +151,6 @@ const FilterModal = () => {
     setPriceRange([0, 1000]); // Reset slider
     setCheckInDate(undefined);
     setCheckOutDate(undefined);
-    setShowCheckInCalendar(false);
-    setShowCheckOutCalendar(false);
 
     // Remove only these specific filters from URL
     const params = new URLSearchParams(searchParams);
@@ -210,62 +205,38 @@ const FilterModal = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="check-in-date">Check-in Date</Label>
-              <Button
-                id="check-in-date"
-                variant={"outline"}
-                className={`w-full justify-start text-left font-normal ${
-                  !checkInDate && "text-muted-foreground"
-                }`}
-                onClick={() => {
-                  setShowCheckInCalendar(!showCheckInCalendar);
-                  setShowCheckOutCalendar(false); // Close other calendar
-                }}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {checkInDate && isValid(checkInDate) ? format(checkInDate, "PPP") : <span>Pick a date</span>}
-              </Button>
-              {showCheckInCalendar && (
-                <Calendar
-                  mode="single"
-                  selected={checkInDate}
-                  onSelect={(date) => {
-                    setCheckInDate(date);
-                    setShowCheckInCalendar(false);
-                  }}
-                  disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || (checkOutDate && date >= checkOutDate)}
-                  initialFocus
-                  className="rounded-md border mt-1" // Add some styling
-                />
+              <Calendar
+                onChange={setCheckInDate}
+                value={checkInDate}
+                minDate={new Date(new Date().setHours(0, 0, 0, 0))} // Disable past dates
+                tileDisabled={({ date, view }) =>
+                  view === 'month' && // only disable tiles in month view
+                  checkOutDate && date >= new Date(new Date(checkOutDate).setHours(0,0,0,0))
+                }
+                className="rounded-md border"
+              />
+              {checkInDate && isValid(checkInDate) && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Selected: {format(checkInDate, "PPP")}
+                </p>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="check-out-date">Check-out Date</Label>
-              <Button
-                id="check-out-date"
-                variant={"outline"}
-                className={`w-full justify-start text-left font-normal ${
-                  !checkOutDate && "text-muted-foreground"
-                }`}
-                onClick={() => {
-                  setShowCheckOutCalendar(!showCheckOutCalendar);
-                  setShowCheckInCalendar(false); // Close other calendar
-                }}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {checkOutDate && isValid(checkOutDate) ? format(checkOutDate, "PPP") : <span>Pick a date</span>}
-              </Button>
-              {showCheckOutCalendar && (
-                <Calendar
-                  mode="single"
-                  selected={checkOutDate}
-                  onSelect={(date) => {
-                    setCheckOutDate(date);
-                    setShowCheckOutCalendar(false);
-                  }}
-                  disabled={(date) => (checkInDate && date <= checkInDate) || date < new Date(new Date().setHours(0,0,0,0))}
-                  initialFocus
-                  className="rounded-md border mt-1" // Add some styling
-                />
+              <Calendar
+                onChange={setCheckOutDate}
+                value={checkOutDate}
+                minDate={new Date(new Date().setHours(0, 0, 0, 0))} // Disable past dates
+                tileDisabled={({ date, view }) =>
+                  view === 'month' && // only disable tiles in month view
+                  checkInDate && date <= new Date(new Date(checkInDate).setHours(23,59,59,999))
+                }
+                className="rounded-md border"
+              />
+              {checkOutDate && isValid(checkOutDate) && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Selected: {format(checkOutDate, "PPP")}
+                </p>
               )}
             </div>
           </div>

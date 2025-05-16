@@ -17,7 +17,7 @@ const campingStore = (set, get) => ({
   // --- New states for paginated reviews in detail page ---
   allReviewsForDetail: [], // Stores all loaded reviews for the current detail
   currentReviewsPageForDetail: 1,
-  totalReviewsForDetail: 0,
+  totalReviewsForDetail: 0, // This will be updated by initial actionReadCamping and actionFetchMoreReviews
   isLoadingMoreReviews: false,
   // --- End new states ---
   userLocation: null, // <-- Add state for user's location
@@ -28,16 +28,16 @@ const campingStore = (set, get) => ({
     // ... (keep existing logic)
     try {
       const res = await listCamping(profileId, token); // Pass profileId and token to the API call
-      console.log("Host landmarks fetched for profileId", profileId, ":", res.data.result);
+      // console.log("Host landmarks fetched for profileId", profileId, ":", res.data.result);
       set({ campings: res.data.result, center: res.data.center, isLoading: false }); // Set isLoading to false on success
     } catch (error) {
-      console.log(error);
+      console.error("Error in actionListCamping:", error);
       set({ isLoading: false }); // Set isLoading to false on error
 
     }
   },
   actionReadCamping: async (id, token) => { // Add token parameter
-    set({ isLoadingDetail: true, currentCampingDetail: null }); // Set loading state
+    set({ isLoadingDetail: true, currentCampingDetail: null, allReviewsForDetail: [], currentReviewsPageForDetail: 1, totalReviewsForDetail: 0 }); // Reset reviews state too
     try {
       const res = await readCamping(id, token); // Pass token to API call
       console.log("Read Camping Result:", res.data.result);
@@ -93,10 +93,10 @@ const campingStore = (set, get) => ({
 
       // --- EXPECTATION FOR OPTIMIZED DATA FROM BACKEND ---
       // Assuming backend now sends:
-      // detailData.reviews (first page of reviews)
+      // detailData.reviews (SHOULD NOT be sent initially, will be fetched separately)
       // detailData.totalReviews (total number of reviews)
       // detailData.averageRating (calculated overall rating)
-      // detailData.reviewCount (same as totalReviews or calculated)
+      // detailData.reviewCount (same as totalReviews or calculated) - ensure this is present
       // detailData.averageRatingsByCategory (object with category-specific averages)
       // detailData.unavailableDates (array of date strings, instead of full bookings array)
       // detailData.publiclyUnavailableDates (if different logic for non-logged-in)
@@ -106,12 +106,12 @@ const campingStore = (set, get) => ({
       set({
         currentCampingDetail: detailData,
         isLoadingDetail: false,
-        allReviewsForDetail: detailData.reviews || [], // Initialize with the first page of reviews
+        allReviewsForDetail: [], // Reviews will be fetched separately
         currentReviewsPageForDetail: 1, // Reset to page 1
-        totalReviewsForDetail: detailData.totalReviews || (detailData.reviews ? detailData.reviews.length : 0), // Use totalReviews from backend if available
+        totalReviewsForDetail: detailData.totalReviews || detailData.reviewCount || 0, // Use totalReviews/reviewCount from backend
       });
     } catch (error) {
-      console.log("Error fetching camping details:", error);
+      console.error("Error fetching camping details in actionReadCamping:", error);
       set({ isLoadingDetail: false }); // Reset loading on error
     }
   },
@@ -176,7 +176,7 @@ const campingStore = (set, get) => ({
       const res = await listFavorites(token);
       set({ favorites: res.data.result });
     } catch (error) {
-      console.log(error);
+      console.error("Error in actionListFavorites:", error);
     }
   },
   // /Users/duke/Documents/GitHub/RentKub/client/src/store/camping-store.jsx (Modified actionFilter)
@@ -192,7 +192,7 @@ const campingStore = (set, get) => ({
       checkOut = null, // Add checkOut
     } = filters;
 
-    console.log("Filtering with:", filters); // Log the filters being used
+    // console.log("Filtering with:", filters); // Log the filters being used
 
     try {
       set({ isLoading: true }); // Set isLoading to true before fetching
@@ -208,7 +208,7 @@ const campingStore = (set, get) => ({
         checkIn, // Pass to API
         checkOut, // Pass to API
       });
-      console.log("action filter result:", res.data);
+      // console.log("action filter result:", res.data);
       // Ensure the backend returns 'result' and 'center' keys
       set({
         campings: res.data.result || [],
@@ -244,6 +244,11 @@ const campingStore = (set, get) => ({
     try {
       const res = await fetchPaginatedReviews(landmarkId, page, limit);
       const { reviews: newReviews, totalReviews, currentPage } = res.data;
+
+      // If it's the first page being loaded, and totalReviewsForDetail is not yet set from initial load, update it.
+      if (page === 1 && get().totalReviewsForDetail === 0 && totalReviews > 0) {
+        set({ totalReviewsForDetail: totalReviews });
+      }
 
       set((state) => ({
         allReviewsForDetail: [...state.allReviewsForDetail, ...newReviews],

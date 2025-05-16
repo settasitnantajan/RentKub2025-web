@@ -181,7 +181,7 @@ function CampingDetail() {
         setMinLoadTimePassed(true);
         console.log("Minimum 0.5-second load time passed.");
       }
-    }, 500);
+    }, 1);
 
     return () => {
       isMounted = false; // Set to false when component unmounts
