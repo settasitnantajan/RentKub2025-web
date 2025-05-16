@@ -1,6 +1,6 @@
 // /Users/duke/Documents/GitHub/RentKub/client/src/pages/user/CampingDetail.jsx
-import { useEffect, useState, useMemo } from "react";
-import { useParams } from "react-router";
+import { useEffect, useState, useMemo, Suspense, lazy, useCallback } from "react"; // Added Suspense, lazy, and useCallback
+import { useParams } from "react-router"; // Corrected import for useParams
 import { useUser, useAuth } from "@clerk/clerk-react"; // Import useAuth
 import useCampingStore from "@/store/camping-store";
 
@@ -12,15 +12,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"; // Import Dropdown components
-import Breadcrums from "@/components/campings/Breadcrums";
-import ImageContainer from "@/components/campings/ImageContainer";
-import Description from "@/components/campings/Description";
+import Breadcrums from "@/components/campings/Breadcrums"; // Assuming this is now memoized
+import ImageContainer from "@/components/campings/ImageContainer"; // Consider memoizing if props are stable
+import Description from "@/components/campings/Description"; // Assuming this is now memoized
 import Mainmap from "@/components/map/Mainmap";
 import FavoriteToggleButton from "@/components/card/FavoriteToggleButton";
-import BookingContainer from "@/components/booking/BookingContainer";
-import PhotoGalleryModal from "@/components/campings/PhotoGalleryModal";
-import ReviewList from "@/components/review/ReviewList" // Import ReviewList
-import RatingBreakdownCard from "@/components/review/RatingBreakdownCard"; // Import the new component
+import BookingContainer from "@/components/booking/BookingContainer"; // Keep BookingContainer as eager load for now
 import {
   // Dialog components are already imported
   Dialog,
@@ -30,10 +27,15 @@ import {
   DialogDescription,
   DialogFooter, // Optional: if you need a footer
 } from "@/components/ui/dialog";
-import LoadingSpinner from "@/pages/LoadingSpinner"; // Import LoadingSpinner
 
-// Potentially add an AmenitiesModal component if you prefer that approach
-// import AmenitiesModal from "@/components/campings/AmenitiesModal";
+// --- Lazy Loaded Components ---
+const PhotoGalleryModal = lazy(() => import("@/components/campings/PhotoGalleryModal"));
+const ReviewList = lazy(() => import("@/components/review/ReviewList"));
+const RatingBreakdownCard = lazy(() => import("@/components/review/RatingBreakdownCard"));
+const HostProfileModal = lazy(() => import("./HostProfileModal"));
+
+// --- Fallback for Suspense ---
+const SuspenseFallback = <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin text-gray-500" /></div>;
 
 // --- Icons ---
 import {
@@ -61,9 +63,7 @@ import {
   Facebook, // Placeholder - Lucide doesn't have brand icons by default
   Instagram, // Placeholder
   // You might need to install a library like `react-icons` for brand icons
-  // e.g., import { FaFacebook, FaInstagram, FaTiktok } from 'react-icons/fa';
 } from "lucide-react";
-import HostProfileModal from "./HostProfileModal";
 
 // --- Constants ---
 const MAX_SECONDARY_IMAGES = 4;
@@ -132,6 +132,8 @@ function CampingDetail() {
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
   const [isHostModalOpen, setIsHostModalOpen] = useState(false); // State for host profile modal
 
+  // State for reviews pagination (example)
+  // const [reviewsPage, setReviewsPage] = useState(1);
   // --- Zustand Store ---
   const camping = useCampingStore((state) => state.currentCampingDetail);
   console.log(camping,'camping')
@@ -143,17 +145,14 @@ function CampingDetail() {
 
   // --- Data Fetching ---
   useEffect(() => {
-    let timerId; // To store the timeout ID
+    let timerId = null; // To store the timeout ID, initialize to null
+    let isMounted = true; // Flag to track if component is mounted
 
     const fetchDetails = async () => {
       if (id) {
         console.log(`Fetching details for camping ID: ${id}`);
-        // Reset minLoadTimePassed for the new fetch and start timer
+        // Reset minLoadTimePassed for the new fetch
         setMinLoadTimePassed(false);
-        timerId = setTimeout(() => {
-          setMinLoadTimePassed(true);
-          console.log("Minimum 0.5-second load time passed.");
-        }, 500); // Changed from 1000ms to 500ms
 
         let token = null;
         if (isSignedIn) { // Check if user is signed in
@@ -162,124 +161,104 @@ function CampingDetail() {
         actionReadCamping(id, token); // Pass the token to the action
       }
     };
+
+    // Start fetching
     fetchDetails();
 
+    // Start timer for minimum load time *after* initiating fetch
+    // This ensures the skeleton shows for at least this duration even if fetch is very fast
+    timerId = setTimeout(() => {
+      if (isMounted) {
+        setMinLoadTimePassed(true);
+        console.log("Minimum 0.5-second load time passed.");
+      }
+    }, 500);
+
     return () => {
+      isMounted = false; // Set to false when component unmounts
       console.log("Cleaning up CampingDetail: Clearing current detail and timer.");
-      clearTimeout(timerId); // Clear the timer on unmount or before re-run
+      if (timerId) {
+        clearTimeout(timerId); // Clear the timer on unmount or before re-run
+      }
       clearCurrentCampingDetail();
       setDerivedLocationName(null); // Reset derived location name on unmount
       setShowAllAmenities(false);
     };
-  }, [id, actionReadCamping, clearCurrentCampingDetail, getToken, isSignedIn]); // Add getToken and isSignedIn to dependencies
+    // Dependencies: Only 'id' and 'isSignedIn' are strictly necessary for re-fetching.
+    // actionReadCamping and clearCurrentCampingDetail from Zustand are stable.
+    // getToken is called inside the effect, so it doesn't need to be a dependency.
+  }, [id, isSignedIn, actionReadCamping, clearCurrentCampingDetail]);
 
   // --- Effect for Reverse Geocoding ---
   useEffect(() => {
-    const fetchLocationName = async (lat, lon) => {
-      if (lat == null || lon == null) return;
+    // Extract specific dependencies to avoid re-running the effect unnecessarily
+    const lat = camping?.lat;
+    const lng = camping?.lng;
+    const existingLocationName = camping?.locationName;
 
-      // Check if locationName is already good or if we already tried fetching
-      if (camping?.locationName && camping.locationName !== DEFAULT_LOCATION_NAME) {
-        setDerivedLocationName(camping.locationName); // Use existing good name
-        return;
-      }
+    const controller = new AbortController(); // Create AbortController
+    const signal = controller.signal; // Get the signal
 
-      console.log(`Fetching location name for: ${lat}, ${lon}`);
+    const fetchLocationName = async (fetchLat, fetchLng) => {
+      if (fetchLat == null || fetchLng == null) return;
+      console.log(`Fetching location name for: ${lat}, ${lng}`);
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`);
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
         if (!response.ok) {
           throw new Error(`Nominatim API request failed: ${response.status}`);
         }
         const data = await response.json();
         console.log("Nominatim response:", data);
         const address = data.address;
-        const name = address?.city || address?.town || address?.village || address?.county || address?.state || `Area near (${lat.toFixed(2)}, ${lon.toFixed(2)})`;
+        const name = address?.city || address?.town || address?.village || address?.county || address?.state || address?.country || `Area near (${fetchLat.toFixed(2)}, ${fetchLng.toFixed(2)})`;
         setDerivedLocationName(name);
       } catch (error) {
-        console.error("Error fetching location name:", error);
-        setDerivedLocationName(`Area near (${lat.toFixed(2)}, ${lon.toFixed(2)})`); // Fallback
+        // Ignore abort errors which happen on cleanup
+        if (error.name !== 'AbortError') {
+          console.error("Error fetching location name:", error);
+          setDerivedLocationName(`Area near (${fetchLat.toFixed(2)}, ${fetchLng.toFixed(2)})`); // Fallback
+        }
       }
     };
 
-    if (camping && (!camping.locationName || camping.locationName === DEFAULT_LOCATION_NAME) && camping.lat != null && camping.lng != null) {
-      fetchLocationName(camping.lat, camping.lng);
-    } else if (camping?.locationName) {
-      setDerivedLocationName(camping.locationName); // Use existing if present and not default
-    }
-  }, [camping]); // Rerun when camping data (and thus lat/lng/locationName) changes
-
-  // --- Memoized Data Preparation ---
-  const preparedData = useMemo(() => {
-    // ... (keep existing logic)
-    if (!camping) return null;
-    console.log(camping,'camping')
-    // Log to check if publiclyUnavailableDates is present on the camping object from the store
-    console.log("[CampingDetail] Raw camping object from store for publiclyUnavailableDates check:", camping);
-
-    const validImages = (
-      Array.isArray(camping.images) ? camping.images : []
-    ).filter((img) => typeof img === "string" && img.trim() !== "");
-    const mainImage = validImages[0] ?? null;
-    const secondaryImages = validImages.slice(1, MAX_SECONDARY_IMAGES + 1);
-
-    const amenities = Array.isArray(camping.amenities) ? camping.amenities : [];
-
-    const title = camping.title ?? "Camping Spot";
-    const description = camping.description ?? "No description available.";
-    const price = camping.price ?? 0;
-    const bookings = Array.isArray(camping.bookings) ? camping.bookings : [];
-    const totalRooms = camping.totalRooms ?? 1; // <-- Extract totalRooms
-    const lat = camping.lat ?? null;
-    const lng = camping.lng ?? null;
-    const isFavorite = camping.isFavorite ?? false;
-    const reviews = Array.isArray(camping.reviews) ? camping.reviews : [];
-    console.log("[CampingDetail] camping.isFavorite from store:", camping.isFavorite, "Calculated isFavorite for prop:", isFavorite);
-
-    const rating = typeof camping.averageRating === 'number' ? camping.averageRating : (camping.rating ?? DEFAULT_RATING); // Prefer averageRating
-    const reviewCount = camping.reviewCount ?? DEFAULT_REVIEW_COUNT;
-    const locationName = derivedLocationName || camping.locationName || DEFAULT_LOCATION_NAME;
-    const address = camping.address ?? null; // <-- Add address
-    
-    // --- NEW: Extract publicly unavailable dates for non-logged-in users ---
-    const publiclyUnavailableDates = camping.publiclyUnavailableDates || [];
-
-    // Calculate average ratings for breakdown
-    let avgOverallRating = 0;
-    let avgCustomerSupportRating = 0;
-    let avgConvenienceRating = 0;
-    let avgSignalQualityRating = 0;
-
-    if (reviews.length > 0) {
-      let totalOverall = 0, countOverall = 0;
-      let totalCustomerSupport = 0, countCustomerSupport = 0;
-      let totalConvenience = 0, countConvenience = 0;
-      let totalSignalQuality = 0, countSignalQuality = 0;
-
-      reviews.forEach(review => {
-        totalOverall += review.overallRating || 0;
-        countOverall++; // Every review has an overall rating
-        // For specific ratings, only count if they are provided (non-zero, assuming 0 means not rated for that category)
-        // Or, if your modal always sends a value (even 0), then always increment count.
-        // For simplicity, let's assume all reviews might have these fields, even if 0.
-        totalCustomerSupport += review.customerSupportRating || 0;
-        totalConvenience += review.convenienceRating || 0;
-        totalSignalQuality += review.signalQualityRating || 0;
-      });
-      avgOverallRating = countOverall > 0 ? totalOverall / countOverall : 0;
-      // For the specific ratings, we'll average over all reviews.
-      // If a review didn't rate a specific aspect, its 0 value will be included.
-      avgCustomerSupportRating = reviews.length > 0 ? totalCustomerSupport / reviews.length : 0;
-      avgConvenienceRating = reviews.length > 0 ? totalConvenience / reviews.length : 0;
-      avgSignalQualityRating = reviews.length > 0 ? totalSignalQuality / reviews.length : 0;
+    // Determine if we need to fetch
+    if (
+      lat != null &&
+      lng != null &&
+      (!existingLocationName || existingLocationName === DEFAULT_LOCATION_NAME)
+    ) {
+      // If lat/lng are present and locationName is missing or default, fetch it.
+      fetchLocationName(lat, lng);
+    } else if (existingLocationName && existingLocationName !== DEFAULT_LOCATION_NAME) {
+      // If a valid locationName already exists, use it.
+      setDerivedLocationName(existingLocationName);
+    } else {
+      // Otherwise (e.g., no lat/lng, or locationName is already default and no lat/lng to fetch)
+      // set derivedLocationName to null or the default, to avoid stale data.
+      setDerivedLocationName(existingLocationName || null); // Or DEFAULT_LOCATION_NAME if preferred
     }
 
-    const hostData = camping.profile ?? {}; // Always use the landmark's host data, or an empty object if none.
+    return () => controller.abort(); // Cleanup: abort fetch on unmount or re-run
+  }, [camping?.lat, camping?.lng, camping?.locationName]); // Rerun only when these specific fields change
+
+  // --- Memoized Host Details ---
+  const hostDetails = useMemo(() => {
+    if (!camping?.profile) return {
+      id: null,
+      clerkId: null,
+      username: null,
+      firstname: "Host",
+      lastname: "",
+      imageUrl: null,
+      otherLandmarks: [],
+      joinedDate: "Date unavailable",
+    };
+
+    const hostData = camping.profile;
     const hostUsername = hostData.username ?? null;
     const hostFirstName = hostData.firstname ?? "Host";
     const hostLastName = hostData.lastname ?? "";
     const hostImageUrl = hostData.imageUrl ?? null;
-    // Assuming 'otherLandmarks' might be part of hostData in the future
-    // For now, it will be an empty array if not present.
     const hostOtherLandmarks = Array.isArray(hostData.otherLandmarks) ? hostData.otherLandmarks : [];
 
     let hostJoinedDate = "Date unavailable";
@@ -296,13 +275,78 @@ function CampingDetail() {
         console.warn("Could not parse host joined date:", hostData.createAt);
       }
     }
+    return {
+      id: hostData.id,
+      clerkId: hostData.clerkId,
+      username: hostUsername,
+      firstname: hostFirstName,
+      lastname: hostLastName,
+      imageUrl: hostImageUrl,
+      otherLandmarks: hostOtherLandmarks,
+      joinedDate: hostJoinedDate,
+    };
+  }, [camping?.profile]); // Depends only on camping.profile
+
+  // --- Memoized Average Ratings ---
+  const averageRatings = useMemo(() => {
+    // Now expect backend to provide averageRatingsByCategory or individual averages
+    // and a main averageRating
+    if (camping?.averageRatingsByCategory) {
+      return {
+        overall: camping.averageRating ?? DEFAULT_RATING,
+        ...camping.averageRatingsByCategory, // e.g., { customerSupport: 4.5, convenience: 4.2, ... }
+      };
+    }
+    // Fallback if backend doesn't send detailed breakdown but sends overall
+    return {
+      overall: camping?.averageRating ?? (camping?.rating ?? DEFAULT_RATING),
+      customerSupport: 0, // Default or derive if possible
+      convenience: 0,
+      signalQuality: 0,
+    };
+  }, [camping?.averageRating, camping?.rating, camping?.averageRatingsByCategory]);
+
+  // --- Main Memoized Data Preparation ---
+  const preparedData = useMemo(() => {
+    // Add console log to see when this memo recalculates
+    console.log("[CampingDetail] Recalculating preparedData...", { camping, derivedLocationName, loggedInUser, hostDetails, averageRatings });
+
+    if (!camping) return null;
+
+    const validImages = (
+      Array.isArray(camping.images) ? camping.images : []
+    ).filter((img) => typeof img === "string" && img.trim() !== "");
+    const mainImage = validImages[0] ?? null;
+    const secondaryImages = validImages.slice(1, MAX_SECONDARY_IMAGES + 1);
+
+    const amenities = Array.isArray(camping.amenities) ? camping.amenities : [];
+
+    const title = camping.title ?? "Camping Spot";
+    const description = camping.description ?? "No description available.";
+    const price = camping.price ?? 0;
+    // const bookings = Array.isArray(camping.bookings) ? camping.bookings : []; // No longer need full bookings array here
+    const totalRooms = camping.totalRooms ?? 1;
+    const lat = camping.lat ?? null;
+    const lng = camping.lng ?? null;
+    const isFavorite = camping.isFavorite ?? false;
+    const currentReviewsPage = Array.isArray(camping.reviews) ? camping.reviews : []; // This is now the first page of reviews
+
+    // Use the pre-calculated averageRatings.overall for the main rating display
+    const rating = camping.averageRating ?? averageRatings.overall; // Prefer direct averageRating from backend
+    const reviewCount = camping.reviewCount ?? camping.totalReviews ?? DEFAULT_REVIEW_COUNT; // Prefer direct reviewCount or totalReviews
+    const locationName = derivedLocationName || camping.locationName || DEFAULT_LOCATION_NAME;
+    const address = camping.address ?? null;
+    
+    // Expect `unavailableDates` or `publiclyUnavailableDates` directly from backend
+    const unavailableDatesForBooking = camping.publiclyUnavailableDates || camping.unavailableDates || [];
+
 
     const finalPreparedData = {
       id: camping.id,
       title,
       description,
       price,
-      bookings,
+      // bookings, // No longer passing full bookings array
       lat,
       totalRooms, // <-- Include totalRooms in preparedData
       lng,
@@ -311,32 +355,19 @@ function CampingDetail() {
       mainImage,
       secondaryImages,
       amenities,
-      reviews, // Add reviews to preparedData
+      reviews: currentReviewsPage, // Pass the current page of reviews
+      totalReviews: camping.totalReviews ?? currentReviewsPage.length, // Pass total reviews for "Load More" logic
       rating,
       reviewCount,
       locationName,
       address, // <-- Include address
-      host: {
-        id: hostData.id, // Assuming hostData (from camping.profile) has the host's ID
-        clerkId: hostData.clerkId,
-        username: hostUsername,
-        firstname: hostFirstName,
-        lastname: hostLastName, 
-        imageUrl: hostData.imageUrl ?? null, // Only use host's image or null (or a default placeholder)
-        otherLandmarks: hostOtherLandmarks, // Add other landmarks here
-        joinedDate: hostJoinedDate,
-      },
-      averageRatings: { // Add average ratings to preparedData
-        overall: avgOverallRating || rating, // Fallback to general rating if no specific overall from reviews
-        customerSupport: avgCustomerSupportRating,
-        convenience: avgConvenienceRating,
-        signalQuality: avgSignalQualityRating,
-      },
-      publiclyUnavailableDates, // Add to preparedData
+      host: hostDetails, // Use memoized hostDetails
+      averageRatings, // Use memoized averageRatings
+      publiclyUnavailableDates: unavailableDatesForBooking, // Pass the correct unavailable dates
     };
     console.log("[CampingDetail] Host Image URL after logic:", finalPreparedData.host.imageUrl);
     return finalPreparedData;
-  }, [camping, derivedLocationName, loggedInUser]);
+  }, [camping, derivedLocationName, loggedInUser, hostDetails, averageRatings]); // Add hostDetails and averageRatings as dependencies
 
   // --- Handlers ---
 
@@ -428,9 +459,9 @@ function CampingDetail() {
     setShowAllAmenities((prev) => !prev);
   };
 
-  const openDescriptionModal = () => {
+  const openDescriptionModal = useCallback(() => {
     setIsDescriptionModalOpen(true);
-  };
+  }, []); // Empty dependency array as it doesn't depend on any props/state from this scope
 
   const closeDescriptionModal = () => {
     setIsDescriptionModalOpen(false);
@@ -448,15 +479,73 @@ function CampingDetail() {
   // Render breadcrumbs early, using a placeholder name if data isn't ready
   const breadcrumbItems = [{ label: preparedData?.title || "Loading Details..." }];
 
-  // Show spinner if data is loading OR minimum 1-second display time hasn't passed
+  // Show Skeleton if data is loading OR minimum load time hasn't passed
   if (storeIsLoading || !minLoadTimePassed) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Breadcrumbs for loading state */}
         <div className="mb-2 text-sm">
-          <Breadcrums items={breadcrumbItems} />
+          <div className="h-4 bg-gray-300 rounded w-1/3"></div> {/* Breadcrumb placeholder */}
         </div>
-        <LoadingSpinner customText="Loading camping details..." />
+
+        {/* Header Section Skeleton */}
+        <header className="mb-4">
+          <div className="h-10 bg-gray-300 rounded w-3/4 mb-2"></div> {/* Title placeholder */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <div className="h-4 bg-gray-300 rounded w-1/4"></div> {/* Rating/Reviews placeholder */}
+            <div className="h-4 bg-gray-300 rounded w-1/3"></div> {/* Location placeholder */}
+          </div>
+        </header>
+
+        {/* Image Gallery Skeleton */}
+        <div className="relative grid grid-cols-1 md:grid-cols-4 md:grid-rows-2 gap-2 mb-8 rounded-lg overflow-hidden h-[40vh] md:h-[60vh] max-h-[550px] bg-gray-200">
+          <div className="md:col-span-2 md:row-span-2 bg-gray-300"></div>
+          <div className="hidden md:block bg-gray-300"></div>
+          <div className="hidden md:block bg-gray-300"></div>
+          <div className="hidden md:block bg-gray-300"></div>
+          <div className="hidden md:block bg-gray-300"></div>
+        </div>
+
+        {/* Main Content Section Skeleton */}
+        <section className="lg:grid lg:grid-cols-12 lg:gap-x-12">
+          {/* Left Column Skeleton */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-8 mb-8 lg:mb-0">
+            {/* Host Info Skeleton */}
+            <div className="pt-8 first:pt-0">
+              <div className="flex items-center mb-4">
+                <div className="mr-4 flex-shrink-0 w-12 h-12 rounded-full bg-gray-300"></div>
+                <div>
+                  <div className="h-6 bg-gray-300 rounded w-48 mb-1"></div>
+                  <div className="h-4 bg-gray-300 rounded w-32"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Description Skeleton */}
+            <div>
+              <div className="h-6 bg-gray-300 rounded w-1/2 mb-4"></div>
+              <div className="h-4 bg-gray-300 rounded w-full mb-2"></div>
+              <div className="h-4 bg-gray-300 rounded w-full mb-2"></div>
+              <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+            </div>
+
+            {/* Amenities Skeleton */}
+            <div>
+              <div className="h-6 bg-gray-300 rounded w-1/2 mb-4"></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 mb-4">
+                <div className="h-5 bg-gray-300 rounded w-full"></div>
+                <div className="h-5 bg-gray-300 rounded w-full"></div>
+                <div className="h-5 bg-gray-300 rounded w-full"></div>
+                <div className="h-5 bg-gray-300 rounded w-full"></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column Skeleton (Booking Box) */}
+          <div className="lg:col-span-5 xl:col-span-4">
+            <div className="p-4 sm:p-6 border border-gray-200 rounded-lg shadow-lg bg-gray-200 h-96"></div> {/* Booking box placeholder */}
+          </div>
+        </section>
       </div>
     );
   }
@@ -478,8 +567,8 @@ function CampingDetail() {
     id: campingId,
     title,
     description: campingDescription,
-    price,
-    bookings,
+    price,    
+    // bookings, // No longer destructuring full bookings
     lat,
     totalRooms, // <-- Destructure totalRooms from preparedData
     lng,
@@ -488,17 +577,18 @@ function CampingDetail() {
     mainImage,
     secondaryImages,
     amenities,
-    rating,
-    reviews, // Destructure reviews
+    rating,    
+    reviews, // This is now the current page of reviews
+    totalReviews, // Destructure totalReviews
     reviewCount,
     locationName,
     host,
     address, // <-- Destructure address
-    averageRatings, // Destructure averageRatings
+    // averageRatings, // This is already available from the useMemo above
     publiclyUnavailableDates, // Destructure for passing to BookingContainer
   } = preparedData;
 
-  console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates);
+  console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
 
   const amenitiesToShow = showAllAmenities
     ? amenities
@@ -522,7 +612,7 @@ function CampingDetail() {
             <Star size={16} className="text-yellow-500 mr-1 fill-current" /> {/* This is the main overall rating display */}
             <span>{averageRatings.overall.toFixed(1)}</span>
             <span className="mx-1">·</span>
-            <a href="#reviews" className="underline hover:text-gray-900">
+            <a href="#reviews" className="underline hover:text-gray-900"> {/* reviews.length is now current page's length */}
               {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </a>
           </div>
@@ -838,25 +928,30 @@ function CampingDetail() {
             <h2 className="text-xl font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <Star size={20} className="text-yellow-500 fill-current" />
               {/* Display the calculated average overall rating from reviews if available, else the default */}
-              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)} 
+              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)}
               <span className="font-normal">·</span>
-              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
+              {totalReviews} review{totalReviews !== 1 ? "s" : ""} {/* Use totalReviews here */}
             </h2>
-            {/* Rating Breakdown Section */}
-            {reviews.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 mb-6 mt-4">
-                <RatingBreakdownCard label="Overall experience" rating={averageRatings.overall} />
-                <RatingBreakdownCard label="Customer support" rating={averageRatings.customerSupport} />
-                <RatingBreakdownCard label="Convenience" rating={averageRatings.convenience} />
-                <RatingBreakdownCard label="Signal quality" rating={averageRatings.signalQuality} />
-              </div>
-            )}
-
-            <ReviewList
-              reviews={reviews}
-              landmarkHostProfile={host}
-              loggedInUserId={loggedInUser?.id}
-            />
+            <Suspense fallback={SuspenseFallback}>
+              {/* Rating Breakdown Section */}
+              {reviews.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 mb-6 mt-4">
+                  <RatingBreakdownCard label="Overall experience" rating={averageRatings.overall} />
+                  <RatingBreakdownCard label="Customer support" rating={averageRatings.customerSupport} />
+                  <RatingBreakdownCard label="Convenience" rating={averageRatings.convenience} />
+                  <RatingBreakdownCard label="Signal quality" rating={averageRatings.signalQuality} />
+                </div>
+              )}
+              <ReviewList
+                reviews={reviews}
+                landmarkHostProfile={host}
+                loggedInUserId={loggedInUser?.id}
+                // Add props for pagination if implementing "Load More"
+                // totalReviews={totalReviews}
+                // currentPage={reviewsPage}
+                // onLoadMore={() => setReviewsPage(prev => prev + 1)}
+              />
+            </Suspense>
           </div>
         </div>{" "}
         {/* End Left Column */}
@@ -878,23 +973,27 @@ function CampingDetail() {
 
       {/* --- Photo Gallery Modal --- */}
       {/* ... (keep existing modal logic) */}
-      {galleryStartIndex !== null && (
-        <PhotoGalleryModal
-          images={images}
-          startIndex={galleryStartIndex}
-          onClose={closePhotoGallery}
-          campingTitle={title}
-        />
-      )}
+      <Suspense fallback={null}> {/* Fallback can be null for modals if they are not immediately visible */}
+        {galleryStartIndex !== null && (
+          <PhotoGalleryModal
+            images={images}
+            startIndex={galleryStartIndex}
+            onClose={closePhotoGallery}
+            campingTitle={title}
+          />
+        )}
+      </Suspense>
 
       {/* --- Host Profile Modal --- */}
-      {isHostModalOpen && host && (
-        <HostProfileModal
-          isOpen={isHostModalOpen}
-          onClose={closeHostModal}
-          host={host}
-        />
-      )}
+      <Suspense fallback={null}>
+        {isHostModalOpen && host && (
+          <HostProfileModal
+            isOpen={isHostModalOpen}
+            onClose={closeHostModal}
+            host={host}
+          />
+        )}
+      </Suspense>
 
       {/* --- Description Modal --- */}
       <Dialog

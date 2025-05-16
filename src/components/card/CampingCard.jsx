@@ -71,9 +71,25 @@ const CampingCard = ({ camping }) => {
     );
   };
 
-  // --- Helper to prevent rendering issues if no images ---
-  const currentImageSrc =
-    images.length > 0 ? images[currentIndex] : "/placeholder-image.png"; // Fallback image
+  // --- Helper to get transformed image URL ---
+  const getTransformedImageUrl = (originalUrl) => {
+    if (!originalUrl || originalUrl.startsWith("/placeholder-image.png") || !originalUrl.includes("res.cloudinary.com")) {
+      return originalUrl; // Don't transform placeholder or non-cloudinary URLs
+    }
+    // Define desired transformations
+    // w_300,h_300: target width and height
+    // c_fill: crop mode to fill the dimensions (similar to object-cover)
+    // q_auto: automatic quality optimization
+    // f_auto: automatic format selection (e.g., WebP if supported)
+    const transformations = "w_300,h_300,c_fill,q_auto,f_auto";
+
+    const parts = originalUrl.split("/upload/");
+    if (parts.length === 2) {
+      return `${parts[0]}/upload/${transformations}/${parts[1]}`;
+    }
+    return originalUrl; // Return original if structure is unexpected
+  };
+  const currentImageSrc = getTransformedImageUrl(images.length > 0 ? images[currentIndex] : "/placeholder-image.png");
 
   // --- Calculate distance ---
   const distanceKm = useMemo(() => {
@@ -113,6 +129,9 @@ const CampingCard = ({ camping }) => {
               src={currentImageSrc}
               alt={`${camping.title} - Image ${currentIndex + 1}`}
               className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+              loading="lazy" // <--- เพิ่ม attribute นี้
+              width="300" //  <--- เพิ่ม width (ปรับค่าตามขนาดที่แสดงผลจริง)
+              height="300" // <--- เพิ่ม height (ปรับค่าตามขนาดที่แสดงผลจริง, เนื่องจากเป็น aspect-square)
               onError={(e) => {
                 e.target.src = "/placeholder-image.png";
                 console.error(`Failed to load image: ${currentImageSrc}`);

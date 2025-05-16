@@ -1,9 +1,12 @@
-import CampingContainer from "@/components/home/CampingContainer";
+import React from 'react'; // Import React
+
+// Use React.lazy for dynamic import
+const CampingContainer = React.lazy(() => import("@/components/home/CampingContainer"));
 
 const Home = () => {
   return (
     <div>
-      <CampingContainer />
+      <CampingContainer /> {/* Use the lazy-loaded component */}
     </div>
   );
 };

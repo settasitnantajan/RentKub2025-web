@@ -1,12 +1,27 @@
 import CampingCard from "../card/CampingCard";
 import useCampingStore from "@/store/camping-store";
 import EmptyList from "./EmptyList";
+import SkeletonCard from "@/components/card/SkeletonCard"; // <-- Updated import path
+
 
 const CampingLists = () => {
   const campings = useCampingStore((state) => state.campings);
+  const isLoading = useCampingStore((state) => state.isLoading); // Assuming isLoading state exists in your store
   // console.log(campings);
 
-  if (campings.length === 0) {
+  if (isLoading) {
+    // Display skeleton loaders while loading
+    // You can adjust the number of skeleton cards (e.g., 8)
+    return (
+      <section className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4 mb-32">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <SkeletonCard key={index} />
+        ))}
+      </section>
+    );
+  }
+
+  if (!isLoading && campings.length === 0) {
     return <EmptyList />;
   }
 
