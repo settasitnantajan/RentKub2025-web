@@ -2,6 +2,7 @@ import {
   filterCamping,
   listCamping,
   listFavorites,
+  fetchPaginatedReviews, // <-- Import the new API function
   readCamping,
 } from "@/api/camping";
 import { addOrRemoveFavorite } from "@/api/camping";
@@ -13,6 +14,12 @@ const campingStore = (set, get) => ({
   isLoading: true, // <-- Change initial state to true
   center: null,
   currentCampingDetail: null, // <-- Add state for the detail page
+  // --- New states for paginated reviews in detail page ---
+  allReviewsForDetail: [], // Stores all loaded reviews for the current detail
+  currentReviewsPageForDetail: 1,
+  totalReviewsForDetail: 0,
+  isLoadingMoreReviews: false,
+  // --- End new states ---
   userLocation: null, // <-- Add state for user's location
   isLoadingDetail: false, // <-- Optional: Add loading state for detail
 
@@ -96,7 +103,13 @@ const campingStore = (set, get) => ({
 
       console.log("[STORE] actionReadCamping - Processed detailData (check isFavorite here):", detailData);
 
-      set({ currentCampingDetail: detailData, isLoadingDetail: false });
+      set({
+        currentCampingDetail: detailData,
+        isLoadingDetail: false,
+        allReviewsForDetail: detailData.reviews || [], // Initialize with the first page of reviews
+        currentReviewsPageForDetail: 1, // Reset to page 1
+        totalReviewsForDetail: detailData.totalReviews || (detailData.reviews ? detailData.reviews.length : 0), // Use totalReviews from backend if available
+      });
     } catch (error) {
       console.log("Error fetching camping details:", error);
       set({ isLoadingDetail: false }); // Reset loading on error
@@ -211,8 +224,37 @@ const campingStore = (set, get) => ({
   },
 
   // Optional: Add action to clear detail when navigating away
+  // Modified to also clear review pagination state
   clearCurrentCampingDetail: () => {
-    set({ currentCampingDetail: null, isLoadingDetail: false });
+    set({
+      currentCampingDetail: null,
+      isLoadingDetail: false,
+      allReviewsForDetail: [],
+      currentReviewsPageForDetail: 1,
+      totalReviewsForDetail: 0,
+      isLoadingMoreReviews: false,
+    });
+  },
+
+  // --- New Action to Fetch More Reviews ---
+  actionFetchMoreReviews: async (landmarkId, page, limit = 5) => {
+    if (get().isLoadingMoreReviews) return; // Prevent multiple simultaneous fetches
+
+    set({ isLoadingMoreReviews: true });
+    try {
+      const res = await fetchPaginatedReviews(landmarkId, page, limit);
+      const { reviews: newReviews, totalReviews, currentPage } = res.data;
+
+      set((state) => ({
+        allReviewsForDetail: [...state.allReviewsForDetail, ...newReviews],
+        currentReviewsPageForDetail: currentPage, // Use currentPage from API response
+        totalReviewsForDetail: totalReviews, // Update total reviews count from API response
+        isLoadingMoreReviews: false,
+      }));
+    } catch (error) {
+      console.error("Error fetching more reviews:", error);
+      set({ isLoadingMoreReviews: false });
+    }
   },
 
   // Action to set the user's location

@@ -36,6 +36,7 @@ const HostProfileModal = lazy(() => import("./HostProfileModal"));
 
 // --- Fallback for Suspense ---
 const SuspenseFallback = <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin text-gray-500" /></div>;
+const LoadMoreFallback = <div className="flex justify-center items-center py-4"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>;
 
 // --- Icons ---
 import {
@@ -138,6 +139,12 @@ function CampingDetail() {
   const camping = useCampingStore((state) => state.currentCampingDetail);
   console.log(camping,'camping')
   const storeIsLoading = useCampingStore((state) => state.isLoadingDetail); // Renamed for clarity
+  // --- States for Review Pagination from Store ---
+  const allReviewsForDetail = useCampingStore((state) => state.allReviewsForDetail);
+  const currentReviewsPage = useCampingStore((state) => state.currentReviewsPageForDetail);
+  const totalReviewsFromStore = useCampingStore((state) => state.totalReviewsForDetail); // Renamed to avoid conflict
+  const isLoadingMoreReviews = useCampingStore((state) => state.isLoadingMoreReviews);
+  const actionFetchMoreReviews = useCampingStore((state) => state.actionFetchMoreReviews);
   const actionReadCamping = useCampingStore((state) => state.actionReadCamping);
   const clearCurrentCampingDetail = useCampingStore(
     (state) => state.clearCurrentCampingDetail
@@ -355,8 +362,8 @@ function CampingDetail() {
       mainImage,
       secondaryImages,
       amenities,
-      reviews: currentReviewsPage, // Pass the current page of reviews
-      totalReviews: camping.totalReviews ?? currentReviewsPage.length, // Pass total reviews for "Load More" logic
+      reviews: currentReviewsPage, // This is the first page of reviews from initial load
+      totalReviews: camping.totalReviews ?? currentReviewsPage.length, // This is the total from initial load
       rating,
       reviewCount,
       locationName,
@@ -578,8 +585,8 @@ function CampingDetail() {
     secondaryImages,
     amenities,
     rating,    
-    reviews, // This is now the current page of reviews
-    totalReviews, // Destructure totalReviews
+    // reviews, // We will use allReviewsForDetail from the store directly
+    // totalReviews, // We will use totalReviewsFromStore from the store directly
     reviewCount,
     locationName,
     host,
@@ -588,7 +595,7 @@ function CampingDetail() {
     publiclyUnavailableDates, // Destructure for passing to BookingContainer
   } = preparedData;
 
-  console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
+  // console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
 
   const amenitiesToShow = showAllAmenities
     ? amenities
@@ -612,8 +619,8 @@ function CampingDetail() {
             <Star size={16} className="text-yellow-500 mr-1 fill-current" /> {/* This is the main overall rating display */}
             <span>{averageRatings.overall.toFixed(1)}</span>
             <span className="mx-1">·</span>
-            <a href="#reviews" className="underline hover:text-gray-900"> {/* reviews.length is now current page's length */}
-              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
+            <a href="#reviews" className="underline hover:text-gray-900"> {/* Use totalReviewsFromStore for the link text */}
+              {totalReviewsFromStore} review{totalReviewsFromStore !== 1 ? "s" : ""}
             </a>
           </div>
           <span className="hidden sm:inline">·</span>
@@ -928,11 +935,11 @@ function CampingDetail() {
             <h2 className="text-xl font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <Star size={20} className="text-yellow-500 fill-current" />
               {/* Display the calculated average overall rating from reviews if available, else the default */}
-              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)}
+              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)} {/* Use rating from preparedData which uses backend's averageRating */}
               <span className="font-normal">·</span>
-              {totalReviews} review{totalReviews !== 1 ? "s" : ""} {/* Use totalReviews here */}
+              {totalReviewsFromStore} review{totalReviewsFromStore !== 1 ? "s" : ""} {/* Use totalReviewsFromStore here */}
             </h2>
-            <Suspense fallback={SuspenseFallback}>
+            <Suspense fallback={SuspenseFallback}> {/* Suspense for initial load of ReviewList/RatingBreakdownCard */}
               {/* Rating Breakdown Section */}
               {reviews.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 mb-6 mt-4">
@@ -943,14 +950,24 @@ function CampingDetail() {
                 </div>
               )}
               <ReviewList
-                reviews={reviews}
+                reviews={allReviewsForDetail} // Pass all loaded reviews
                 landmarkHostProfile={host}
                 loggedInUserId={loggedInUser?.id}
-                // Add props for pagination if implementing "Load More"
-                // totalReviews={totalReviews}
-                // currentPage={reviewsPage}
-                // onLoadMore={() => setReviewsPage(prev => prev + 1)}
               />
+              {/* "Load More" Button and Loading Indicator */}
+              {allReviewsForDetail.length < totalReviewsFromStore && !isLoadingMoreReviews && (
+                <div className="mt-6 text-center">
+                  <Button
+                    onClick={() => actionFetchMoreReviews(id, currentReviewsPage + 1)}
+                    variant="outline"
+                  >
+                    Load More Reviews
+                  </Button>
+                </div>
+              )}
+              {isLoadingMoreReviews && (
+                <LoadMoreFallback />
+              )}
             </Suspense>
           </div>
         </div>{" "}

@@ -139,3 +139,10 @@ export const filterCamping = async (filters, token) => { // Made async, added to
 
   return axios.get(url);
 };
+
+// --- New Function to Fetch Paginated Reviews ---
+export const fetchPaginatedReviews = async (landmarkId, page, limit) => {
+  const params = new URLSearchParams({ page, limit });
+  return await axios.get(`https://rentkub2025-api.vercel.app/api/camping/${landmarkId}/reviews?${params.toString()}`);
+};
+// --- End New Function ---
