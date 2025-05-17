@@ -36,7 +36,6 @@ const HostProfileModal = lazy(() => import("./HostProfileModal"));
 
 // --- Fallback for Suspense ---
 const SuspenseFallback = <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin text-gray-500" /></div>;
-const LoadMoreFallback = <div className="flex justify-center items-center py-4"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>;
 
 // --- Icons ---
 import {
@@ -139,19 +138,11 @@ function CampingDetail() {
   const camping = useCampingStore((state) => state.currentCampingDetail);
   console.log(camping,'camping')
   const storeIsLoading = useCampingStore((state) => state.isLoadingDetail); // Renamed for clarity
-  // --- States for Review Pagination from Store ---
-  const allReviewsForDetail = useCampingStore((state) => state.allReviewsForDetail);
-  console.log(allReviewsForDetail, 'allReviewsForDetail')
-  const currentReviewsPage = useCampingStore((state) => state.currentReviewsPageForDetail);
-  const totalReviewsFromStore = useCampingStore((state) => state.totalReviewsForDetail); // Renamed to avoid conflict
-  const isLoadingMoreReviews = useCampingStore((state) => state.isLoadingMoreReviews);
-  const actionFetchMoreReviews = useCampingStore((state) => state.actionFetchMoreReviews);
   const actionReadCamping = useCampingStore((state) => state.actionReadCamping);
   const clearCurrentCampingDetail = useCampingStore(
     (state) => state.clearCurrentCampingDetail
   );
 
-  console.log(camping, 'campings')
   // --- Data Fetching ---
   useEffect(() => {
     let timerId = null; // To store the timeout ID, initialize to null
@@ -181,7 +172,7 @@ function CampingDetail() {
         setMinLoadTimePassed(true);
         console.log("Minimum 0.5-second load time passed.");
       }
-    }, 1);
+    }, 500);
 
     return () => {
       isMounted = false; // Set to false when component unmounts
@@ -210,9 +201,9 @@ function CampingDetail() {
 
     const fetchLocationName = async (fetchLat, fetchLng) => {
       if (fetchLat == null || fetchLng == null) return;
-      console.log(`Fetching location name for: ${lat}, ${lng}`);
+      console.log(`Fetching location name for: ${fetchLat}, ${fetchLng}`);
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${fetchLat}&lon=${fetchLng}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
         if (!response.ok) {
           throw new Error(`Nominatim API request failed: ${response.status}`);
         }
@@ -317,6 +308,7 @@ function CampingDetail() {
       signalQuality: camping?.reviews[0]?.signalQualityRating ?? DEFAULT_RATING,
     };
   }, [camping?.averageRating, camping?.rating, camping?.averageRatingsByCategory]);
+
   // --- Main Memoized Data Preparation ---
   const preparedData = useMemo(() => {
     // Add console log to see when this memo recalculates
@@ -366,8 +358,8 @@ function CampingDetail() {
       mainImage,
       secondaryImages,
       amenities,
-      reviews: currentReviewsPage, // This is the first page of reviews from initial load
-      totalReviews: camping.totalReviews ?? currentReviewsPage.length, // This is the total from initial load
+      reviews: currentReviewsPage, // Pass the current page of reviews
+      totalReviews: camping.totalReviews ?? currentReviewsPage.length, // Pass total reviews for "Load More" logic
       rating,
       reviewCount,
       locationName,
@@ -589,8 +581,8 @@ function CampingDetail() {
     secondaryImages,
     amenities,
     rating,    
-    reviews, // We will use allReviewsForDetail from the store directly for the list (but uncommenting to fix ReferenceError)
-    // totalReviews, // We will use totalReviewsFromStore from the store directly for counts
+    reviews, // This is now the current page of reviews
+    totalReviews, // Destructure totalReviews
     reviewCount,
     locationName,
     host,
@@ -599,7 +591,7 @@ function CampingDetail() {
     publiclyUnavailableDates, // Destructure for passing to BookingContainer
   } = preparedData;
 
-  // console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
+  console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
 
   const amenitiesToShow = showAllAmenities
     ? amenities
@@ -623,8 +615,8 @@ function CampingDetail() {
             <Star size={16} className="text-yellow-500 mr-1 fill-current" /> {/* This is the main overall rating display */}
             <span>{averageRatings.overall.toFixed(1)}</span>
             <span className="mx-1">·</span>
-            <a href="#reviews" className="underline hover:text-gray-900"> {/* Use totalReviewsFromStore for the link text */}
-              {totalReviewsFromStore} review{totalReviewsFromStore !== 1 ? "s" : ""}
+            <a href="#reviews" className="underline hover:text-gray-900"> {/* reviews.length is now current page's length */}
+              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </a>
           </div>
           <span className="hidden sm:inline">·</span>
@@ -939,14 +931,13 @@ function CampingDetail() {
             <h2 className="text-xl font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <Star size={20} className="text-yellow-500 fill-current" />
               {/* Display the calculated average overall rating from reviews if available, else the default */}
-              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)} {/* Use rating from preparedData which uses backend's averageRating */}
+              {(averageRatings.overall > 0 ? averageRatings.overall : rating).toFixed(1)}
               <span className="font-normal">·</span>
-              {totalReviewsFromStore} review{totalReviewsFromStore !== 1 ? "s" : ""} {/* Use totalReviewsFromStore here */}
+              {totalReviews} review{totalReviews !== 1 ? "s" : ""} {/* Use totalReviews here */}
             </h2>
-            <Suspense fallback={SuspenseFallback}> {/* Suspense for initial load of ReviewList/RatingBreakdownCard */}
+            <Suspense fallback={SuspenseFallback}>
               {/* Rating Breakdown Section */}
-              {/* Use allReviewsForDetail.length or totalReviewsFromStore to decide if breakdown should show */}
-              {allReviewsForDetail.length > 0 && ( 
+              {reviews.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 mb-6 mt-4">
                   <RatingBreakdownCard label="Overall experience" rating={averageRatings.overall} />
                   <RatingBreakdownCard label="Customer support" rating={averageRatings.customerSupport} />
@@ -955,24 +946,14 @@ function CampingDetail() {
                 </div>
               )}
               <ReviewList
-                reviews={allReviewsForDetail} // Pass all loaded reviews
+                reviews={reviews}
                 landmarkHostProfile={host}
                 loggedInUserId={loggedInUser?.id}
+                // Add props for pagination if implementing "Load More"
+                // totalReviews={totalReviews}
+                // currentPage={reviewsPage}
+                // onLoadMore={() => setReviewsPage(prev => prev + 1)}
               />
-              {/* "Load More" Button and Loading Indicator */}
-              {allReviewsForDetail.length < totalReviewsFromStore && !isLoadingMoreReviews && (
-                <div className="mt-6 text-center">
-                  <Button
-                    onClick={() => actionFetchMoreReviews(id, currentReviewsPage + 1)}
-                    variant="outline"
-                  >
-                    Load More Reviews
-                  </Button>
-                </div>
-              )}
-              {isLoadingMoreReviews && (
-                <LoadMoreFallback />
-              )}
             </Suspense>
           </div>
         </div>{" "}
