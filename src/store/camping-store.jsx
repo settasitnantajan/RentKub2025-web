@@ -31,7 +31,7 @@ const campingStore = (set, get) => ({
       // console.log("Host landmarks fetched for profileId", profileId, ":", res.data.result);
       set({ campings: res.data.result, center: res.data.center, isLoading: false }); // Set isLoading to false on success
     } catch (error) {
-      console.error("Error in actionListCamping:", error);
+      // console.error("Error in actionListCamping:", error);
       set({ isLoading: false }); // Set isLoading to false on error
 
     }
@@ -40,8 +40,8 @@ const campingStore = (set, get) => ({
     set({ isLoadingDetail: true, currentCampingDetail: null, allReviewsForDetail: [], currentReviewsPageForDetail: 1, totalReviewsForDetail: 0 }); // Reset reviews state too
     try {
       const res = await readCamping(id, token); // Pass token to API call
-      console.log("Read Camping Result:", res.data.result);
-      console.log("[STORE] actionReadCamping - Raw data from API for camping ID", id, ":", res.data.result); // Log raw data
+      // console.log("Read Camping Result:", res.data.result);
+      // console.log("[STORE] actionReadCamping - Raw data from API for camping ID", id, ":", res.data.result); // Log raw data
 
       // Ensure the result is an object, not an array if readCamping returns a single item
       let detailData = Array.isArray(res.data.result)
@@ -62,28 +62,28 @@ const campingStore = (set, get) => ({
             // Create a new object with the parsed amenities to avoid mutating the original response object directly
             detailData = { ...detailData, amenities: parsedAmenities };
           } else {
-            console.warn(
-              `Parsed amenities for camping ID ${id} was not an array:`,
-              parsedAmenities
-            );
+            // console.warn(
+            //   `Parsed amenities for camping ID ${id} was not an array:`,
+            //   parsedAmenities
+            // );
             // Default to empty array if parsing results in non-array
             detailData = { ...detailData, amenities: [] };
           }
         } catch (parseError) {
-          console.error(
-            `Failed to parse amenities JSON string for camping ID ${id}:`,
-            detailData.amenities,
-            parseError
-          );
+          // console.error(
+          //   `Failed to parse amenities JSON string for camping ID ${id}:`,
+          //   detailData.amenities,
+          //   parseError
+          // );
           // Default to empty array on parsing error
           detailData = { ...detailData, amenities: [] };
         }
       } else if (detailData && !Array.isArray(detailData.amenities)) {
         // If amenities exist but are not a string or array, default to empty array
-        console.warn(
-          `Amenities field for camping ID ${id} is not a string or array:`,
-          detailData.amenities
-        );
+        // console.warn(
+        //   `Amenities field for camping ID ${id} is not a string or array:`,
+        //   detailData.amenities
+        // );
         detailData = { ...detailData, amenities: [] };
       } else if (detailData && !detailData.amenities) {
         // If detailData exists but amenities is missing/null/undefined, ensure it's an empty array
@@ -101,7 +101,7 @@ const campingStore = (set, get) => ({
       // detailData.unavailableDates (array of date strings, instead of full bookings array)
       // detailData.publiclyUnavailableDates (if different logic for non-logged-in)
 
-      console.log("[STORE] actionReadCamping - Processed detailData (check isFavorite here):", detailData);
+      // console.log("[STORE] actionReadCamping - Processed detailData (check isFavorite here):", detailData);
 
       set({
         currentCampingDetail: detailData,
@@ -111,7 +111,7 @@ const campingStore = (set, get) => ({
         totalReviewsForDetail: detailData.totalReviews || detailData.reviewCount || 0, // Use totalReviews/reviewCount from backend
       });
     } catch (error) {
-      console.error("Error fetching camping details in actionReadCamping:", error);
+      // console.error("Error fetching camping details in actionReadCamping:", error);
       set({ isLoadingDetail: false }); // Reset loading on error
     }
   },
@@ -146,7 +146,7 @@ const campingStore = (set, get) => ({
           ];
         } else {
           updatedFavoritesList = favoritesList; // Or fetch if necessary
-          console.warn("Could not find item to add to favorites list");
+          // console.warn("Could not find item to add to favorites list");
         }
       } else {
         // If removing
@@ -176,7 +176,7 @@ const campingStore = (set, get) => ({
       const res = await listFavorites(token);
       set({ favorites: res.data.result });
     } catch (error) {
-      console.error("Error in actionListFavorites:", error);
+      // console.error("Error in actionListFavorites:", error);
     }
   },
   // /Users/duke/Documents/GitHub/RentKub/client/src/store/camping-store.jsx (Modified actionFilter)
@@ -216,7 +216,7 @@ const campingStore = (set, get) => ({
         isLoading: false, // Set isLoading to false on success
       });
     } catch (error) {
-      console.error("action filter error:", error); // Use console.error for errors
+      // console.error("action filter error:", error); // Use console.error for errors
       set({ isLoading: false }); // Set isLoading to false on error
       // Handle error state, e.g., clear campings
       set({ campings: [], center: null });
@@ -257,7 +257,7 @@ const campingStore = (set, get) => ({
         isLoadingMoreReviews: false,
       }));
     } catch (error) {
-      console.error("Error fetching more reviews:", error);
+      // console.error("Error fetching more reviews:", error);
       set({ isLoadingMoreReviews: false });
     }
   },

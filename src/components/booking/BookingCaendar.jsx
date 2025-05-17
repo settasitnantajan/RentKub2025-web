@@ -37,9 +37,9 @@ const BookingCaendar = ({
   const { user } = useUser(); // <-- Get user info to check for their own bookings
   // const campingId = useBookingStore((state) => state.campingId); // <-- REMOVE: Get campingId from prop instead
 
-  useEffect(() => {
-    console.log("[BookingCalendar] Props Received:", { campingId, totalRooms, initialUnavailableDates });
-  }, [campingId, totalRooms, initialUnavailableDates]);
+  // useEffect(() => {
+  //   // console.log("[BookingCalendar] Props Received:", { campingId, totalRooms, initialUnavailableDates });
+  // }, [campingId, totalRooms, initialUnavailableDates]);
 
   // --- Effect to load booking data or use initial unavailable dates ---
   useEffect(() => {
@@ -54,8 +54,7 @@ const BookingCaendar = ({
 
       // --- Step 1: ALWAYS process initialUnavailableDates first to set a baseline ---
       const processedInitialUnavailableDays = new Set();
-      // CRITICAL LOG: What is the value of initialUnavailableDates at this exact moment?
-      console.log("[BookingCalendar] loadData EFFECT: Prop 'initialUnavailableDates' before processing loop:", JSON.stringify(initialUnavailableDates));
+      // console.log("[BookingCalendar] loadData EFFECT: Prop 'initialUnavailableDates' before processing loop:", JSON.stringify(initialUnavailableDates));
 
       // Assuming initialUnavailableDates are "YYYY-MM-DD" strings from props
       if (initialUnavailableDates && Array.isArray(initialUnavailableDates) && initialUnavailableDates.length > 0) {
@@ -68,18 +67,18 @@ const BookingCaendar = ({
         });
       }
       setFullyBookedDays(processedInitialUnavailableDays);
-      console.log("[BookingCalendar] loadData EFFECT: State 'fullyBookedDays' set to (from props):", JSON.stringify(Array.from(processedInitialUnavailableDays)));
+      // console.log("[BookingCalendar] loadData EFFECT: State 'fullyBookedDays' set to (from props):", JSON.stringify(Array.from(processedInitialUnavailableDays)));
 
       if (!isSignedIn) {
         // --- Non-logged-in user ---
-        console.log("[BookingCalendar] User NOT signed in. Using initialUnavailableDates processed from props.");
+        // console.log("[BookingCalendar] User NOT signed in. Using initialUnavailableDates processed from props.");
         // Ensure dailyBookingCounts is empty for non-signed-in users as they don't see detailed counts
         setDailyBookingCounts(new Map());
         setIsLoading(false);
       } else {
         // --- Logged-in user ---
         // For logged-in users, fullyBookedDays will be calculated based on fetched bookings in the next effect.
-        console.log(`BookingCalendar: User signed in. Fetching bookings for campingId: ${campingId}`);
+        // console.log(`BookingCalendar: User signed in. Fetching bookings for campingId: ${campingId}`);
         try {
           const token = await getToken();
           if (!token) {
@@ -90,7 +89,7 @@ const BookingCaendar = ({
           }
           const response = await listBookingsByCampingId(token, campingId);
           const fetchedBookings = response.data.result || [];
-          console.log("[BookingCalendar] Fetched Bookings for signed-in user:", fetchedBookings);
+          // console.log("[BookingCalendar] Fetched Bookings for signed-in user:", fetchedBookings);
           setBookings(fetchedBookings); // This will trigger the next useEffect to calculate counts
         } catch (err) {
           // If fetching bookings fails, we still have the initial set of fullyBookedDays from props.
@@ -114,7 +113,7 @@ const BookingCaendar = ({
       // For non-signed-in users, fullyBookedDays is set from initialUnavailableDates in the loadData effect.
       // Ensure dailyBookingCounts is clear if this effect somehow runs for them.
       setDailyBookingCounts(new Map());
-      console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Skipping detailed count for non-signed-in user. Using fullyBookedDays from props.");
+      // console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Skipping detailed count for non-signed-in user. Using fullyBookedDays from props.");
       return;
     }
 
@@ -122,15 +121,14 @@ const BookingCaendar = ({
     // It will calculate daily counts and fully booked days based on the fetched `bookings`.
     // If `bookings` array is empty, `calculatedCounts` and `calculatedFullyBooked` will be empty,
     // correctly reflecting no booked days based on this (empty) data source.
-    console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculating detailed counts for signed-in user based on fetched bookings:", bookings);
+    // console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculating detailed counts for signed-in user based on fetched bookings:", bookings);
 
     const calculatedCounts = new Map(); // Map to store counts for each day: YYYY-MM-DD -> count
     bookings.forEach(booking => {
       try {
         // --- ADDED: Filter for paid bookings before counting ---
         // This ensures client-side calculation for "fully booked" aligns with server's likely criteria for public unavailability.
-        if (booking.paymentStatus !== true) {
-          console.log("[BookingCalendar] Skipping daily count for unpaid booking:", booking.id);
+        if (booking.paymentStatus !== true) { // console.log("[BookingCalendar] Skipping daily count for unpaid booking:", booking.id);
           return; // Skip this iteration if the booking is not paid
         }
 
@@ -163,10 +161,10 @@ const BookingCaendar = ({
       }
     });
 
-    console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculated Daily Booking Counts (for signed-in user):", calculatedCounts);
-    console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculated Fully Booked Days (for signed-in user, from fetched bookings):", JSON.stringify(Array.from(calculatedFullyBooked)));
+    // console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculated Daily Booking Counts (for signed-in user):", calculatedCounts);
+    // console.log("[BookingCalendar] useEffect[bookings, totalRooms]: Calculated Fully Booked Days (for signed-in user, from fetched bookings):", JSON.stringify(Array.from(calculatedFullyBooked)));
     setDailyBookingCounts(calculatedCounts); // This should be before setFullyBookedDays if it depends on it, but it doesn't here.
-    console.log("[BookingCalendar] SIGNED-IN: Setting fullyBookedDays based on fetched bookings:", JSON.stringify(Array.from(calculatedFullyBooked)));
+    // console.log("[BookingCalendar] SIGNED-IN: Setting fullyBookedDays based on fetched bookings:", JSON.stringify(Array.from(calculatedFullyBooked)));
     setFullyBookedDays(calculatedFullyBooked); // Overwrites if previously set by initialUnavailableDates, which is fine for logged-in.
   }, [bookings, totalRooms, isSignedIn]); // Added isSignedIn
 
@@ -186,7 +184,7 @@ const BookingCaendar = ({
         }
       });
 
-      console.log("[BookingCalendar] useEffect[range]: Max booked on any day in selection (for signed-in user):", maxBookedOnAnyStayDay);
+      // console.log("[BookingCalendar] useEffect[range]: Max booked on any day in selection (for signed-in user):", maxBookedOnAnyStayDay);
       const minAvailable = Math.max(0, totalRooms - maxBookedOnAnyStayDay);
       setMinAvailableDuringSelection(minAvailable);
     } else {
@@ -215,7 +213,7 @@ const BookingCaendar = ({
           if (user && booking.userId === user.id && areIntervalsOverlapping(selectedInterval, existingInterval, { inclusive: true })) {
 
 
-            console.log("[BookingCalendar] useEffect[range]: Overlap detected with current user's existing booking:", booking);
+            // console.log("[BookingCalendar] useEffect[range]: Overlap detected with current user's existing booking:", booking);
             overlapFound = true;
             break; // Exit loop once an overlap is found
           }
@@ -285,7 +283,7 @@ const BookingCaendar = ({
 
     // If only 'from' is selected (to is undefined)
     if (from && !to) {
-      console.log("[BookingCalendar] validateAndSetRange: Setting 'from' date:", selectedRange);
+      // console.log("[BookingCalendar] validateAndSetRange: Setting 'from' date:", selectedRange);
       setRange({ from, to: undefined });
       return;
     }
@@ -312,7 +310,7 @@ const BookingCaendar = ({
       createAlert("error", "Selected range includes unavailable dates.");
       setRange({ from: from, to: undefined }); // Reset 'to', keep 'from'
     } else {
-      console.log("[BookingCalendar] validateAndSetRange: Valid range selected:", selectedRange);
+      // console.log("[BookingCalendar] validateAndSetRange: Valid range selected:", selectedRange);
       setRange(selectedRange);
     }
   };

@@ -136,7 +136,6 @@ function CampingDetail() {
   // const [reviewsPage, setReviewsPage] = useState(1);
   // --- Zustand Store ---
   const camping = useCampingStore((state) => state.currentCampingDetail);
-  console.log(camping,'camping')
   const storeIsLoading = useCampingStore((state) => state.isLoadingDetail); // Renamed for clarity
   const actionReadCamping = useCampingStore((state) => state.actionReadCamping);
   const clearCurrentCampingDetail = useCampingStore(
@@ -150,7 +149,6 @@ function CampingDetail() {
 
     const fetchDetails = async () => {
       if (id) {
-        console.log(`Fetching details for camping ID: ${id}`);
         // Reset minLoadTimePassed for the new fetch
         setMinLoadTimePassed(false);
 
@@ -170,13 +168,11 @@ function CampingDetail() {
     timerId = setTimeout(() => {
       if (isMounted) {
         setMinLoadTimePassed(true);
-        console.log("Minimum 0.5-second load time passed.");
       }
     }, 500);
 
     return () => {
       isMounted = false; // Set to false when component unmounts
-      console.log("Cleaning up CampingDetail: Clearing current detail and timer.");
       if (timerId) {
         clearTimeout(timerId); // Clear the timer on unmount or before re-run
       }
@@ -201,14 +197,12 @@ function CampingDetail() {
 
     const fetchLocationName = async (fetchLat, fetchLng) => {
       if (fetchLat == null || fetchLng == null) return;
-      console.log(`Fetching location name for: ${fetchLat}, ${fetchLng}`);
       try {
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${fetchLat}&lon=${fetchLng}&zoom=10&addressdetails=1`, { signal }); // Pass the signal
         if (!response.ok) {
           throw new Error(`Nominatim API request failed: ${response.status}`);
         }
         const data = await response.json();
-        console.log("Nominatim response:", data);
         const address = data.address;
         const name = address?.city || address?.town || address?.village || address?.county || address?.state || address?.country || `Area near (${fetchLat.toFixed(2)}, ${fetchLng.toFixed(2)})`;
         setDerivedLocationName(name);
@@ -311,8 +305,6 @@ function CampingDetail() {
 
   // --- Main Memoized Data Preparation ---
   const preparedData = useMemo(() => {
-    // Add console log to see when this memo recalculates
-    console.log("[CampingDetail] Recalculating preparedData...", { camping, derivedLocationName, loggedInUser, hostDetails, averageRatings });
 
     if (!camping) return null;
 
@@ -368,7 +360,6 @@ function CampingDetail() {
       averageRatings, // Use memoized averageRatings
       publiclyUnavailableDates: unavailableDatesForBooking, // Pass the correct unavailable dates
     };
-    console.log("[CampingDetail] Host Image URL after logic:", finalPreparedData.host.imageUrl);
     return finalPreparedData;
   }, [camping, derivedLocationName, loggedInUser, hostDetails, averageRatings]); // Add hostDetails and averageRatings as dependencies
 
@@ -405,9 +396,7 @@ function CampingDetail() {
     if (navigator.share) {
       try {
         await navigator.share(shareData);
-        console.log("Content shared successfully via native share");
       } catch (error) {
-        console.error("Error using native share:", error);
         // Don't alert if the user simply cancelled the share dialog ('AbortError')
         if (error.name !== "AbortError") {
           alert("Could not share.");
@@ -423,7 +412,6 @@ function CampingDetail() {
   const handleShareFacebook = () => {
     if (!preparedData) return;
     const url = window.location.href;
-    console.log(url, "url");
     const facebookShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
       url
     )}`;
@@ -590,8 +578,6 @@ function CampingDetail() {
     // averageRatings, // This is already available from the useMemo above
     publiclyUnavailableDates, // Destructure for passing to BookingContainer
   } = preparedData;
-
-  console.log("[CampingDetail] Value being passed as initialUnavailableDates to BookingContainer:", publiclyUnavailableDates, "Original camping.unavailableDates:", camping?.unavailableDates);
 
   const amenitiesToShow = showAllAmenities
     ? amenities

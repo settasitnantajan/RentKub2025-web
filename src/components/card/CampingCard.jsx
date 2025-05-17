@@ -121,7 +121,12 @@ const CampingCard = ({ camping }) => {
       transition={{ duration: 0.5 }}
       className="shadow-lg rounded-xl overflow-hidden group" // Updated styling: more shadow, rounded-xl
     >
-      <Link to={`/user/camping/${camping.id}`} className="block">
+      <Link
+        to={`/user/camping/${camping.id}`}
+        className="block"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         <div className="relative">
           {/* --- Image Container --- */}
           <div className="aspect-square overflow-hidden"> {/* Enforces square aspect ratio */}
